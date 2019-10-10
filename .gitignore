@@ -1,0 +1,16 @@
+*~
+*.swp
+*.swo
+*.zip
+
+__pycache__/
+beautifulsoup4*
+bin/
+bs4*
+certifi*
+chardet*
+idna*
+requests*
+soupsieve*
+urllib3*
+

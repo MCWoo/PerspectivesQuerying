@@ -1,0 +1,145 @@
+# Stack for Perspectives notifications
+
+Resources:
+  PerspectivesLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: IAM Role to allow Perspectives lambda to read/write from DDB and push to SNS
+      AssumeRolePolicyDocument: |
+        {
+          "Version": "2012-10-17",
+          "Statement": [ {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [ "lambda.amazonaws.com" ]
+              },
+              "Action": ["sts:AssumeRole"]
+            }
+          ]
+        }
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      Policies:
+        - PolicyName: DynamoDBAccess
+          PolicyDocument: !Sub |
+            {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "dynamodb:BatchWriteItem",
+                            "dynamodb:PutItem",
+                            "dynamodb:GetItem",
+                            "dynamodb:Scan",
+                            "dynamodb:Query",
+                            "dynamodb:UpdateItem"
+                        ],
+                        "Resource": "${PerspectivesClassesTable.Arn}"
+                    }
+                ]
+            }
+        - PolicyName: SnsPublish
+          PolicyDocument: !Sub |
+            {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "SNS:Publish"
+                        ],
+                        "Resource": "${PerspectivesNotification}"
+                    }
+                ]
+            }
+
+  PerspectivesLambdaInvokerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: IAM Role to allow Cloudwatch event to invoke lambda
+      AssumeRolePolicyDocument: !Sub |
+        {
+          "Version": "2012-10-17",
+          "Statement": [ {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [ "events.amazonaws.com" ]
+              },
+              "Action": ["sts:AssumeRole"]
+            }
+          ]
+        }
+      Policies:
+        - PolicyName: LambdaInvoke
+          PolicyDocument: !Sub |
+            {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "lambda:InvokeFunction"
+                        ],
+                        "Resource": "${QueryPerspectives.Arn}"
+                    }
+                ]
+            }
+
+  PerspectivesEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Rule to periodically invoke the Perspectives querying function
+      ScheduleExpression: rate(1 days)
+      RoleArn: !GetAtt PerspectivesLambdaInvokerRole.Arn
+      Targets:
+        - Id: QueryPerspectives
+          Arn: !GetAtt QueryPerspectives.Arn
+
+  QueryPerspectives:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Function that periodically queries Perspectives class info, and pushes new classes to an SNS topic
+      Runtime: python3.7
+      Code:
+        ZipFile: |
+          def query_perspectives(event, context):
+              return {
+                  'statusCode': 503,
+                  'body': 'Not implemented',
+              }
+      Handler: index.query_perspectives
+      Environment:
+        Variables:
+          DdbTableName: !Ref PerspectivesClassesTable
+          SnsTopicArn: !Ref PerspectivesNotification
+      Role: !GetAtt PerspectivesLambdaRole.Arn
+      Timeout: 30 # seconds
+
+  QueryPerspectivesLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${QueryPerspectives}"
+
+  PerspectivesNotification:
+    Type: AWS::SNS::Topic
+
+  PerspectivesClassesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: session
+          AttributeType: S
+        - AttributeName: name
+          AttributeType: S
+      KeySchema:
+        - AttributeName: session
+          KeyType: HASH
+        - AttributeName: name
+          KeyType: RANGE
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
