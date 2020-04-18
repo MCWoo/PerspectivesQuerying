@@ -118,7 +118,7 @@ def get_class_delta(class_info, ddb_table_name):
 
 
 def save_classes(class_info, ddb_table_name):
-    half_year = timedelta(days=6*30)
+    one_year = timedelta(days=365)
 
     now = datetime.utcnow().replace(microsecond=0)
     now_iso = now.isoformat() + 'Z'
@@ -133,7 +133,7 @@ def save_classes(class_info, ddb_table_name):
                     'end': { 'S': class_info[session][name]['end'] },
                     'created': { 'S': now_iso },
                     'modified': { 'S': now_iso },
-                    'ttl': { 'N': str((now + half_year).timestamp()) },
+                    'ttl': { 'N': str((now + one_year).timestamp()) },
                 }
             }
         }
